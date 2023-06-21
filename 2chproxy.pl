@@ -136,6 +136,10 @@ my $PROXY_CONFIG  = {
   HTML2DAT_REGEX => '<dt>(\d+)\s[^<]*<(?:a href="mailto:([^"]+)"|font[^>]*)><b>(.*?)</b></(?:a|font)>.((?:[^<]+?)(?:\s*<a href="?http[^">]*"?[^>]*>[^<]*</a>)?(?:\s*(?:[^<]+?(?:(?:<\d+>)+[^<]*)?))?)?\s*(?:<a\s[^>]*be\(([^)]*)\)[^>]*>\?([^<]+)</a>)?<dd>([^\n]+)',
   HTML2DAT_REGEX2 => '<(?:div|span) class="number">(\d+)[^<]*</(?:div|span)><(?:div|span) class="name"><b>(?:<a href="mailto:([^"]+)">((?:(?!</a>).)*)</a>|(?:<font[^>]*>)?((?:(?!<\w+ class="date">).)*?)(?:</font>)?)</b></(?:div|span)><(?:div|span) class="date">((?:(?!(?:<div class="message">|<dd class="thread_in">)).)*?)</\w+>(?:<(?:div|span) class="be\s[^"]+"><a href="https?://be.\d+ch.net/user/(\d+)"[^>]*>\?([^>]+)</a>)?(?:|</div>|</span></div>)(?:<div class="message">|</dt><dd class="thread_in">)((?:(?!</(?:div|dd)>).)*)</(?:div|dd)>',
   #WEBスクレイピングの細かい部分の正規表現は下の方
+
+  # datをクラシックモードで取得するか 0:新モード 1:クラシックモード
+  USE_CLASSIC_MODE => 0,
+  HTML_2DAT_NEW_REGEX => '<article id="(\d+)"[^>]+><details[^>]+><summary><span[^>]+>\d{4}</span><span[^>]+><b><a href="mailto:(.*?)">(.+?)</a></b></span></summary><span[^>]+>(.+?)</span><span[^>]+>(.+?)</span></details><section[^>]+>(.+?)</section></article>',
 };
 
 #ログ出力用、こっちは弄らないでね
@@ -465,7 +469,7 @@ sub html2dat() {
   my $dat_del_span = '</?span[^>]*>';
   my $response_regex;
   my $prev_res_number = $cache{dat_last_num} && $cache{dat_last_num}-1 || 0;
-
+  my $regex = $PROXY_CONFIG->{HTML2DAT_REGEX2};
   #dat生成部分
   my $make_dat = sub {
     my $line;
@@ -571,7 +575,10 @@ sub html2dat() {
     }
   }
   else{
-    while ($html =~ m|$PROXY_CONFIG->{HTML2DAT_REGEX2}|gs) {
+    if ($PROXY_CONFIG->{USE_CLASSIC_MODE} == 0) {
+      $regex = $PROXY_CONFIG->{HTML_2DAT_NEW_REGEX};
+    }
+    while ($html =~ m|$regex|gs) {
       $make_dat->(
         title => $title,
         res_number => ($1),
@@ -1368,10 +1375,12 @@ sub scraping_2ch_request() {
     $is_gzip  = $6;
 
     $hash_key  = $domain.$category.$dat;
-    $rewrite_uri = $uri->scheme()."://".$host.$domain."/test/read.cgi/c/".$category."/".$dat."/";
-    # ピンクチャンネルだけパス書き換え
-    if ($domain eq '.bbspink.com') {
-      $rewrite_uri  = $uri->scheme()."://".$host.$domain."/test/read.cgi/".$category."/".$dat."/";
+
+    $rewrite_uri  = $uri->scheme()."://".$host.$domain."/test/read.cgi/".$category."/".$dat."/";
+    if ($PROXY_CONFIG->{USE_CLASSIC_MODE} == 1) {
+      if ($domain ne '.bbspink.com') {
+        $rewrite_uri = $uri->scheme()."://".$host.$domain."/test/read.cgi/c/".$category."/".$dat."/";
+      }
     }
   }
   else {
